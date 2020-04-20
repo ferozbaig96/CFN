@@ -1,0 +1,119 @@
+Resources: 
+# Application Load Balancer
+  MyALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: MyALB-CFN
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      LoadBalancerAttributes: 
+        - { Key: idle_timeout.timeout_seconds, Value: 60 }
+        - { Key: routing.http2.enabled, Value: false }
+      SecurityGroups: 
+        - !Ref MyALBSG
+      Subnets: 
+        - subnet-6720602d
+        - subnet-94d669ba
+      Tags: 
+        - { Key: "auto-delete", Value: "no" }
+
+# Target Group for ALB
+  MyTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: My-ALB-CFN-TG
+      VpcId: vpc-8c995af6
+      Protocol: HTTP
+      Port: 80
+      HealthCheckEnabled: true
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: "80"
+      HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 5
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher: 
+        HttpCode: "200,302"
+      TargetType: instance
+      TargetGroupAttributes: 
+        - { Key: deregistration_delay.timeout_seconds, Value: 0}
+      Targets:
+        - { Id: !Ref MyWebServer, Port: 80 }
+
+# Listener for ALB
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      LoadBalancerArn: !Ref MyALB
+      Protocol: HTTP
+      Port: 80
+      DefaultActions: 
+        - 
+          Type: forward
+          TargetGroupArn: !Ref MyTG
+
+# Security Group for ALB
+  MyALBSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "CFN created SecurityGroup for ALB"
+      VpcId: vpc-8c995af6
+      SecurityGroupEgress:
+        - 
+          Description: "All Traffic"
+          IpProtocol: "-1"
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: "0.0.0.0/0"
+      SecurityGroupIngress: 
+        - 
+          Description: "TCP port 80"
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        -
+          Description: "TCP port 443"
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+
+# Security Group for Web Server
+  MyWSSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "CFN created SecurityGroup for MyWebServer"
+      VpcId: vpc-8c995af6
+      SecurityGroupIngress: 
+        - 
+          Description: "TCP port 80"
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: !Ref MyALBSG
+          
+# Web server behind ALB
+  MyWebServer:
+    Type: AWS::EC2::Instance
+    Properties: 
+      InstanceType: t2.micro
+      ImageId: ami-0aa3f36a000402f57
+      SubnetId: subnet-94d669ba
+      SecurityGroupIds: 
+        - !Ref MyWSSG
+      Tags:
+        - { Key: "auto-delete", Value: "no" }
+
+# Output http://<ALB-DNS>
+Outputs:
+  LoadBalancerDNSName:
+    Description: The DNSName of the ALB
+    Value: 
+      !Join
+        - ''
+        - 
+          - 'http://'
+          - !GetAtt MyALB.DNSName

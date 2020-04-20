@@ -1,0 +1,54 @@
+Parameters:
+  MyVPC:
+    Type: AWS::EC2::VPC::Id
+    Default: "vpc-8c995af6"
+  MyWebServerSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-94d669ba
+  # MyWebServerSG:
+  #   Type: List<AWS::EC2::SecurityGroup::Id>
+  #   Default: sg-916002db
+
+Resources:
+  MyWebServer:
+    Type: AWS::EC2::Instance
+    Properties: 
+      InstanceType: t2.micro
+      ImageId: ami-0aa3f36a000402f57
+      SubnetId: !Ref MyWebServerSubnet
+      SecurityGroupIds: [ "sg-916002db", !Ref "MyOpenSG" ]
+        # Array of strings
+        # - sg-916002db
+        # - !Ref MyOpenSG
+      Tags:
+        # Array of objects
+        - 
+          Key: "auto-delete"
+          Value: "no"
+        - { Key: "abc", Value: "def" }
+
+  MyOpenSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "CFN created SecurityGroup (open for all)"
+      VpcId: !Ref MyVPC
+      SecurityGroupEgress:
+        - 
+          Description: "All Traffic"
+          IpProtocol: "-1"
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: "0.0.0.0/0"
+      SecurityGroupIngress: 
+        - 
+          Description: "TCP port 80"
+          IpProtocol: "tcp"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        -
+          Description: "TCP port 443"
+          IpProtocol: "tcp"
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
