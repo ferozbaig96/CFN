@@ -1,0 +1,61 @@
+# Resources: 
+#   MyInstance: 
+#     Type: AWS::EC2::Instance
+#     Metadata: 
+#       AWS::CloudFormation::Init: 
+#         config: 
+#           packages: 
+#             :
+#           groups: 
+#             :
+#           users: 
+#             :
+#           sources: 
+#             :
+#           files: 
+#             :
+#           commands: 
+#             :
+#           services: 
+#             :
+#     Properties: 
+#       :
+
+Resources:
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Metadata: 
+      AWS::CloudFormation::Init:
+        config: 
+          packages: 
+            yum:
+              httpd: []
+              php: []
+          files: 
+            /var/www/html/index.php:
+              content: !Sub |
+                <?php print "Hello world made by CFN!"; ?>
+          services: 
+            sysvinit:
+              httpd:
+                enabled: true
+                ensureRunning: true
+                # The httpd service will be restarted if either 
+                # /etc/nginx/nginx.conf or /var/www/html are modified by cfn-init. 
+                files: 
+                  - "/etc/httpd/httpd.conf"
+                sources: 
+                  - "/var/www/html"
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-0aa3f36a000402f57
+      SubnetId: subnet-94d669ba
+      SecurityGroupIds: [ "sg-916002db" ]
+      UserData: 
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash -xe            
+            # Ensure AWS CFN Bootstrap is the latest
+            yum install -y aws-cfn-bootstrap
+            # Install the files and packages from the metadata
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MyInstance  --region ${AWS::Region}
