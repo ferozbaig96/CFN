@@ -1,0 +1,557 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "",
+  "Metadata": {},
+  "Parameters": {
+    "ChallengeIdParameter": {
+      "Type": "String",
+      "Description": "ChallengeId of the challenge for which the stack is being provisioned."
+    },
+    "AttemptIdParameter": {
+      "Type": "String",
+      "Description": "AttemptID of the attempt for which the stack is being provisioned."
+    },
+    "UserAliasParameter": {
+      "Type": "String",
+      "Description": "Alias of the user for whom the stack is being provisioned."
+    },
+    "Route53HostedZoneIDParameter": {
+      "Type": "String",
+      "Description": "Hosted Zone ID of the zone where you can create sub-domains"
+    },
+    "AcmCertARNParameter": {
+      "Type": "String",
+      "Description": "ARN of the wildcard ACM cert which can be used with the sub-domain"
+    },
+    "S3BucketNameParameter": {
+      "Type": "String",
+      "Description": "Name of the S3 bucket which you should use"
+    },
+    "S3PrefixNameParameter": {
+      "Type": "String",
+      "Description": "Folder in the S3 bucket where you can write into"
+    },
+    "RegionParameter": {
+      "Type": "String",
+      "Description": "Region where this template will be run and resources will be provisioned"
+    },
+    "ConsoleAccessPasswordParameter": {
+      "Type": "String",
+      "Description": "Password for the user who wishes to access the console. Default is myP@ssW0rd."
+    }
+  },
+  "Mappings": {
+    "AWSRegion2AMI": {
+      "us-east-1": {
+        "AMIId": "ami-00068cd7555f543d5"
+      }
+    }
+  },
+  "Conditions": {},
+  "Resources": {
+    "NHTLABEC2KeyPair": {
+      "Type": "AWS::CloudFormation::CustomResource",
+      "Version": "1.0",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "NHTLABEC2KeyPairFunction",
+            "Arn"
+          ]
+        },
+        "challengeId": {
+          "Ref": "ChallengeIdParameter"
+        },
+        "user": {
+          "Ref": "UserAliasParameter"
+        },
+        "attemptId": {
+          "Ref": "AttemptIdParameter"
+        }
+      }
+    },
+    "NHTLABEC2KeyPairFunction": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": "warbase-us-east-1",
+          "S3Key": "keypaircode/customkeypair.zip"
+        },
+        "Handler": {
+          "Fn::Join": [
+            "",
+            [
+              "lambda_function",
+              ".lambda_handler"
+            ]
+          ]
+        },
+        "Runtime": "python3.6",
+        "Timeout": "30",
+        "Role": {
+          "Fn::GetAtt": [
+            "NHTLABLambdaExecutionRole",
+            "Arn"
+          ]
+        }
+      }
+    },
+    "NHTLABLambdaExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "lambda.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path": "/",
+        "Policies": [
+          {
+            "PolicyName": "root",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents"
+                  ],
+                  "Resource": "arn:aws:logs:*:*:*"
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:*"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "NHTLABIGW": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABIGW"
+          }
+        ]
+      }
+    },
+    "NHTLABVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": "172.31.0.0/16",
+        "EnableDnsHostnames": true,
+        "EnableDnsSupport": true,
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHT-LAB-VPC"
+          }
+        ]
+      }
+    },
+    "NHTLABIGWAttach": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "NHTLABVPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "NHTLABIGW"
+        }
+      }
+    },
+    "NHTLABRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "NHTLABVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABRouteTable"
+          }
+        ]
+      }
+    },
+    "NHTLABRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "NHTLABVPCSubnet"
+        },
+        "RouteTableId": {
+          "Ref": "NHTLABRouteTable"
+        }
+      }
+    },
+    "NHTLABRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "NHTLABIGWAttach",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "NHTLABRouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "NHTLABIGW"
+        }
+      }
+    },
+    "NHTLABVPCSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "NHTLABVPC"
+        },
+        "CidrBlock": "172.31.0.0/24",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHT-LAB-VPC-Subnet"
+          }
+        ]
+      }
+    },
+    "NHTLABSG": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "NHTLABSG",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "NHTLABSGIngressRule",
+            "FromPort": 0,
+            "IpProtocol": "tcp",
+            "ToPort": 65535
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "NHTLABSGEgressRule",
+            "IpProtocol": "-1"
+          }
+        ],
+        "VpcId": {
+          "Ref": "NHTLABVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABSG"
+          }
+        ]
+      }
+    },
+    "NHTLABSGserver": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "NHTLABSGserver",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "NHTLABSGIngressRuleserverHTTP",
+            "FromPort": 80,
+            "IpProtocol": "tcp",
+            "ToPort": 80
+          },
+          {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "NHTLABSGIngressRuleserverICMP",
+            "FromPort": -1,
+            "IpProtocol": "icmp",
+            "ToPort": -1
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "NHTLABSGEgressRuleserver",
+            "IpProtocol": "-1"
+          }
+        ],
+        "VpcId": {
+          "Ref": "NHTLABVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABSGserver"
+          }
+        ]
+      }
+    },
+    "NHTLABEIP": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABEIP"
+          }
+        ]
+      }
+    },
+    "NHTLABEIPserver": {
+      "Type": "AWS::EC2::EIP",
+      "Properties": {
+        "Domain": "vpc",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABEIPserver"
+          }
+        ]
+      }
+    },
+    "NHTLABSSMRoleforEC2": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM"
+        ]
+      }
+    },
+    "NHTLABSSMInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "Path": "/",
+        "Roles": [
+          {
+            "Ref": "NHTLABSSMRoleforEC2"
+          }
+        ]
+      }
+    },
+    "NHTLABEC2server": {
+      "Type": "AWS::EC2::Instance",
+      "Properties": {
+        "KeyName": {
+          "Fn::GetAtt": [
+            "NHTLABEC2KeyPair",
+            "KeyName"
+          ]
+        },
+        "PrivateIpAddress": "172.31.0.20",
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -xe\n",
+                "sudo yum install httpd -y\n",
+                "sudo service httpd start\n",
+                "echo congrats you have been successful in reaching me >> /var/www/html/index.html"
+              ]
+            ]
+          }
+        },
+        "ImageId": "ami-00eb20669e0990cb4",
+        "InstanceType": "t2.micro",
+        "SubnetId": {
+          "Ref": "NHTLABVPCSubnet"
+        },
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "NHTLABVPCSubnet",
+            "AvailabilityZone"
+          ]
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "NHTLABSGserver"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABEC2server"
+          },
+          {
+            "Key": "UserAlias",
+            "Value": {
+              "Ref": "UserAliasParameter"
+            }
+          },
+          {
+            "Key": "AttemptID",
+            "Value": {
+              "Ref": "AttemptIdParameter"
+            }
+          }
+        ]
+      }
+    },
+    "NHTLABEC2": {
+      "Type": "AWS::EC2::Instance",
+      "DependsOn": [
+        "NHTLABEC2server"
+      ],
+      "Properties": {
+        "KeyName": {
+          "Fn::GetAtt": [
+            "NHTLABEC2KeyPair",
+            "KeyName"
+          ]
+        },
+        "PrivateIpAddress": "172.31.0.30",
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash -xe\n",
+                "sudo iptables -A OUTPUT -p tcp --dport 80 -d 172.31.0.20 -j DROP\n",
+                "sudo route add -host ",
+                {
+                  "Fn::GetAtt": [
+                    "NHTLABEC2server",
+                    "PrivateIp"
+                  ]
+                },
+                " gw 172.31.0.3 eth0"
+              ]
+            ]
+          }
+        },
+        "ImageId": "ami-00eb20669e0990cb4",
+        "InstanceType": "t2.micro",
+        "IamInstanceProfile": {
+          "Ref": "NHTLABSSMInstanceProfile"
+        },
+        "SubnetId": {
+          "Ref": "NHTLABVPCSubnet"
+        },
+        "AvailabilityZone": {
+          "Fn::GetAtt": [
+            "NHTLABVPCSubnet",
+            "AvailabilityZone"
+          ]
+        },
+        "SecurityGroupIds": [
+          {
+            "Ref": "NHTLABSG"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "NHTLABEC2"
+          },
+          {
+            "Key": "UserAlias",
+            "Value": {
+              "Ref": "UserAliasParameter"
+            }
+          },
+          {
+            "Key": "AttemptID",
+            "Value": {
+              "Ref": "AttemptIdParameter"
+            }
+          }
+        ]
+      }
+    },
+    "NHTEIPAllocation": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "DependsOn": "NHTLABIGWAttach",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "NHTLABEIP",
+            "AllocationId"
+          ]
+        },
+        "InstanceId": {
+          "Ref": "NHTLABEC2"
+        }
+      }
+    },
+    "NHTEIPAllocationserver": {
+      "Type": "AWS::EC2::EIPAssociation",
+      "DependsOn": "NHTLABIGWAttach",
+      "Properties": {
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "NHTLABEIPserver",
+            "AllocationId"
+          ]
+        },
+        "InstanceId": {
+          "Ref": "NHTLABEC2server"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "InstanceId": {
+      "Description": "The client instance ID",
+      "Value": {
+        "Ref": "NHTLABEC2"
+      }
+    },
+    "ServerIpAddress": {
+      "Description": "IP address of the server instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "NHTLABEC2server",
+          "PrivateIp"
+        ]
+      }
+    },
+    "ClientIpAddress": {
+      "Description": "Public IP address of the client EC2 instance",
+      "Value": {
+        "Ref": "NHTLABEIP"
+      }
+    },
+    "InstancePrivateKey": {
+      "Description": "The private key of the EC2 instance",
+      "Value": {
+        "Fn::GetAtt": [
+          "NHTLABEC2KeyPair",
+          "KeyContent"
+        ]
+      }
+    }
+  }
+}

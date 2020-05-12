@@ -1,0 +1,52 @@
+{
+  "challengeStartTime": 1533787156256,
+  "attemptID": "a-p7quocxf",
+  "stackID": "arn:aws:cloudformation:ap-south-1:749334262463:stack/bottlenose-a-p7quocxf/dda330f0-9b87-11e8-a1ac-504dccc1c856",
+  "createdAt": 1533786847977,
+  "score": 0,
+  "user": "<alias>",
+  "challengeEndTime": 1533788956256,
+  "durationAllotted": 1800000,
+  "outputs": [
+    {
+      "OutputKey": "ConsoleAccessURL",
+      "OutputValue": "https://<account-id>.signin.aws.amazon.com/console?region=ap-south-1",
+      "Description": "URL to allow the user to log into the console"
+    },
+    {
+      "OutputKey": "EC2InstanceId",
+      "OutputValue": "i-07308ed69ad0f469b",
+      "Description": "InstanceId of the newly created EC2 instance"
+    },
+    {
+      "OutputKey": "DefaultConsoleAccessPassword",
+      "OutputValue": "<password>",
+      "Description": "Password to allow the user to log into the console"
+    },
+    {
+      "OutputKey": "InstanceIpAddress",
+      "OutputValue": "52.200.223.54",
+      "Description": "IP address of the newly created EC2 instance"
+    },
+    {
+      "OutputKey": "ConsoleAccessUsername",
+      "OutputValue": "<username>",
+      "Description": "Username to allow the user to log into the console"
+    },
+    {
+      "OutputKey": "InstancePrivateKey",
+      "OutputValue": "-----BEGIN RSA PRIVATE KEY-----\nabcdefghijklmnopqrstuvwxyz==\n-----END RSA PRIVATE KEY-----",
+      "Description": "Private key of the newly created EC2 instance"
+    },
+    {
+      "OutputKey": "Route53HostedZoneID",
+      "OutputValue": "Z06367043I4AIVGR7QUL0",
+      "Description": ""
+    }
+  ],
+  "stackState": "CREATE_COMPLETE",
+  "updatedAt": 1533787156256,
+  "attemptStatus": "validating",
+  "id": "c-1618fa5a:<alias>",
+  "stackRequestTime": 1533786847977
+}

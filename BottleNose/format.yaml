@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ''
+Metadata: {}
+Parameters:
+  ChallengeIdParameter:
+    Type: String
+    Description: ChallengeId of the challenge for which the stack is being provisioned.
+    Default: c-abcdxxxx
+  AttemptIdParameter:
+    Type: String
+    Description: AttemptID of the attempt for which the stack is being provisioned.
+    Default: '123'
+  UserAliasParameter:
+    Type: String
+    Description: Alias of the user for whom the stack is being provisioned.
+    Default: 'randomAlias'
+  Route53HostedZoneIDParameter:
+    Type: String
+    Description: Hosted Zone ID of the zone where you can create sub-domains
+  AcmCertARNParameter:
+    Type: String
+    Description: ARN of the wildcard ACM cert which can be used with the sub-domain
+  S3BucketNameParameter:
+    Type: String
+    Description: Name of the S3 bucket which you should use
+  S3PrefixNameParameter:
+    Type: String
+    Description: Folder in the S3 bucket where you can write into
+  RegionParameter:
+    Type: String
+    Description: Region where this template will be run and resources will be provisioned
+  ConsoleAccessPasswordParameter:
+    Type: String
+    Description: >-
+      Password for the user who wishes to access the console. Default is
+      myP@ssW0rd.
+
+Mappings:
+  AWSRegion2AMI:
+    us-east-1:
+      # Amazon Linux AMI 2018.03.0 (HVM), SSD Volume Type - ami-0915e09cc7ceee3ab
+      AMI: ami-0915e09cc7ceee3ab
+
+Conditions: {}
+
+Resources:
+  ConsoleUser:
+    Type: 'AWS::IAM::User'
+    Properties:
+      Path: /
+      LoginProfile:
+        Password: !Ref ConsoleAccessPasswordParameter
+        PasswordResetRequired: 'false'
+      Policies:
+        - PolicyName: VPCScenario1
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:List*'
+                  - 'ec2:Get*'
+                  - 'ec2:Describe*'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:List*'
+                  - 'elasticloadbalancing:Get*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                  - 'ec2:AuthorizeSecurityGroupEgress'
+                  - 'ec2:RevokeSecurityGroupIngress'
+                  - 'ec2:RevokeSecurityGroupEgress'
+                  - 'ec2:CreateRoute'
+                  - 'ec2:DeleteRoute'
+                  - 'ec2:ReplaceRoute'
+                Resource:
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:*:*'
+
+
+
+## MY RESOURCES
+
+Outputs:
+  InstancePrivateKey:
+    Description: The private key of the EC2 instance
+    Value: !GetAtt NHTLABEC2KeyPair.KeyContent

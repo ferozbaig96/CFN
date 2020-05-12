@@ -1,0 +1,402 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ''
+Metadata: {}
+Parameters:
+  ChallengeIdParameter:
+    Type: String
+    Description: ChallengeId of the challenge for which the stack is being provisioned.
+    Default: c-abcdxxxx
+  AttemptIdParameter:
+    Type: String
+    Description: AttemptID of the attempt for which the stack is being provisioned.
+    Default: '123'
+  UserAliasParameter:
+    Type: String
+    Description: Alias of the user for whom the stack is being provisioned.
+    Default: 'randomAlias'
+  Route53HostedZoneIDParameter:
+    Type: String
+    Description: Hosted Zone ID of the zone where you can create sub-domains
+    Default: default
+  AcmCertARNParameter:
+    Type: String
+    Description: ARN of the wildcard ACM cert which can be used with the sub-domain
+    Default: default
+  S3BucketNameParameter:
+    Type: String
+    Description: Name of the S3 bucket which you should use
+    Default: default
+  S3PrefixNameParameter:
+    Type: String
+    Description: Folder in the S3 bucket where you can write into
+    Default: default
+  RegionParameter:
+    Type: String
+    Description: Region where this template will be run and resources will be provisioned
+    Default: default
+  ConsoleAccessPasswordParameter:
+    Type: String
+    Description: >-
+      Password for the user who wishes to access the console. Default is
+      myP@ssW0rd.
+    Default: myP@ssW0rd
+
+Mappings:
+  AWSRegion2AMI:
+    us-east-1:
+      # Amazon Linux AMI 2018.03.0 (HVM), SSD Volume Type - ami-0915e09cc7ceee3ab
+      AMI: ami-0915e09cc7ceee3ab
+
+Conditions: {}
+
+Resources:
+  ConsoleUser:
+    Type: 'AWS::IAM::User'
+    Properties:
+      Path: /
+      LoginProfile:
+        Password: !Ref ConsoleAccessPasswordParameter
+        PasswordResetRequired: 'false'
+      Policies:
+        - PolicyName: VPCScenario1
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:List*'
+                  - 'ec2:Get*'
+                  - 'ec2:Describe*'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:List*'
+                  - 'elasticloadbalancing:Get*'
+                  - 'cloudwatch:GetMetricStatistics'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:AuthorizeSecurityGroupIngress'
+                  - 'ec2:AuthorizeSecurityGroupEgress'
+                  - 'ec2:RevokeSecurityGroupIngress'
+                  - 'ec2:RevokeSecurityGroupEgress'
+                Resource:
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:*:*'
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:ModifyTargetGroup'
+                  - 'elasticloadbalancing:ModifyTargetGroupAttributes'
+                Resource:
+                  - !Ref MyNLBTG
+  # VPC
+  NHTLABVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 172.31.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: NHT-LAB-VPC
+  # Subnet
+  NHTLABVPCSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref NHTLABVPC
+      CidrBlock: 172.31.0.0/24
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: NHT-LAB-VPC-Subnet-a
+  NHTLABVPCSubnetB:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref NHTLABVPC
+      CidrBlock: 172.31.1.0/24
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: NHT-LAB-VPC-Subnet-b
+  # IGW
+  NHTLABIGW:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: NHTLABIGW
+  NHTLABIGWAttach:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref NHTLABVPC
+      InternetGatewayId: !Ref NHTLABIGW
+  # RouteTable
+  NHTLABRouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref NHTLABVPC
+      Tags:
+        - Key: Name
+          Value: NHTLABRouteTable
+  NHTLABRoute:
+    Type: 'AWS::EC2::Route'
+    DependsOn: NHTLABIGWAttach
+    Properties:
+      RouteTableId: !Ref NHTLABRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref NHTLABIGW
+  NHTLABSubnetRouteTableAssociation:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref NHTLABVPCSubnet
+      RouteTableId: !Ref NHTLABRouteTable
+  NHTLABSubnetRouteTableAssociationB:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref NHTLABVPCSubnetB
+      RouteTableId: !Ref NHTLABRouteTable
+  # NetworkACL
+  NHTLABNetworkAcl:
+    Type: 'AWS::EC2::NetworkAcl'
+    Properties:
+      VpcId: !Ref NHTLABVPC
+      Tags:
+        - Key: Name
+          Value: NHTLABNetworkAcl
+  NHTLABInboundIPV4NetworkAclEntry:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NHTLABNetworkAcl
+      RuleNumber: '100'
+      Protocol: '-1'
+      RuleAction: allow
+      Egress: 'false'
+      CidrBlock: 0.0.0.0/0
+  NHTLABOutBoundIPV4NetworkAclEntry:
+    Type: 'AWS::EC2::NetworkAclEntry'
+    Properties:
+      NetworkAclId: !Ref NHTLABNetworkAcl
+      RuleNumber: '100'
+      Protocol: '-1'
+      RuleAction: allow
+      Egress: 'true'
+      CidrBlock: 0.0.0.0/0
+  NHTLABSubnetNetworkAclAssociation:
+    Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+    Properties:
+      SubnetId: !Ref NHTLABVPCSubnet
+      NetworkAclId: !Ref NHTLABNetworkAcl
+  # SecurityGroup
+  NHTLABSG:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: NHTLABSG
+      # TODO Comment SecurityGroupIngress and SecurityGroupEgress
+      # SecurityGroupIngress:
+      #   - CidrIp: 0.0.0.0/0
+      #     Description: NHTLABSGIngressRule
+      #     FromPort: 22
+      #     IpProtocol: tcp
+      #     ToPort: 22
+      #   - CidrIp: 0.0.0.0/0
+      #     Description: NHTLABSGIngressRule
+      #     FromPort: 80
+      #     IpProtocol: tcp
+      #     ToPort: 80
+      # SecurityGroupEgress:
+      #   - CidrIp: 0.0.0.0/0
+      #     Description: NHTLABSGEgressRule
+      #     IpProtocol: '-1'
+      VpcId: !Ref NHTLABVPC
+      Tags:
+        - Key: Name
+          Value: NHTLABSG
+  # EC2 Server KeyPair creation
+  # NHTLABEC2KeyPair:
+  #   Type: 'AWS::CloudFormation::CustomResource'
+  #   Version: '1.0'
+  #   Properties:
+  #     ServiceToken: !GetAtt NHTLABEC2KeyPairFunction.Arn
+  #     challengeId: !Ref ChallengeIdParameter
+  #     user: !Ref UserAliasParameter
+  #     attemptId: !Ref AttemptIdParameter
+  # NHTLABEC2KeyPairFunction:
+  #   Type: 'AWS::Lambda::Function'
+  #   Properties:
+  #     Code:
+  #       S3Bucket: warbase-us-east-1
+  #       S3Key: keypaircode/customkeypair.zip
+  #     Handler: !Join 
+  #       - ''
+  #       - - lambda_function
+  #         - .lambda_handler
+  #     Runtime: python3.6
+  #     Timeout: '30'
+  #     Role: !GetAtt NHTLABLambdaExecutionRole.Arn
+  # NHTLABLambdaExecutionRole:
+  #   Type: 'AWS::IAM::Role'
+  #   Properties:
+  #     AssumeRolePolicyDocument:
+  #       Version: 2012-10-17
+  #       Statement:
+  #         - Effect: Allow
+  #           Principal:
+  #             Service:
+  #               - lambda.amazonaws.com
+  #           Action:
+  #             - 'sts:AssumeRole'
+  #     Path: /
+  #     Policies:
+  #       - PolicyName: root
+  #         PolicyDocument:
+  #           Version: 2012-10-17
+  #           Statement:
+  #             - Effect: Allow
+  #               Action:
+  #                 - 'logs:CreateLogGroup'
+  #                 - 'logs:CreateLogStream'
+  #                 - 'logs:PutLogEvents'
+  #               Resource: 'arn:aws:logs:*:*:*'
+  #             - Effect: Allow
+  #               Action:
+  #                 - 'ec2:*'
+  #               Resource: '*'
+  # EC2 Server Role (Instance Profile)
+  NHTLABSSMRoleforEC2:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM'
+  NHTLABSSMInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref NHTLABSSMRoleforEC2
+  # EIP for server
+  serverNHTLABEIP:
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: serverNHTLABEIP
+  serverNHTEIPAllocation:
+    Type: 'AWS::EC2::EIPAssociation'
+    DependsOn: NHTLABIGWAttach
+    Properties:
+      AllocationId: !GetAtt 
+        - serverNHTLABEIP
+        - AllocationId
+      InstanceId: !Ref MyEC2server
+
+  # EC2 server
+  MyEC2server:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !FindInMap [AWSRegion2AMI, !Ref "AWS::Region", AMI]
+      # KeyName: !GetAtt NHTLABEC2KeyPair.KeyName
+      # TODO Comment
+      # KeyName: MyNorthVirginiaKP
+      IamInstanceProfile: !Ref NHTLABSSMInstanceProfile
+      SubnetId: !Ref NHTLABVPCSubnet
+      AvailabilityZone: us-east-1a
+      SecurityGroupIds:
+        - !Ref NHTLABSG
+      UserData:
+        "Fn::Base64":
+          !Sub |
+            #!/bin/bash -xe
+            sudo yum install httpd -y
+            echo Welcome to my website! >> /var/www/html/index.html
+            sudo service httpd restart
+            sudo chkconfig httpd on
+      Tags:
+        - Key: Name
+          Value: MyEC2server
+        - Key: UserAlias
+          Value: !Ref UserAliasParameter
+        - Key: AttemptID
+          Value: !Ref AttemptIdParameter
+  # Network Load Balancer
+  MyNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: MyNLB-CFN
+      Type: network
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      LoadBalancerAttributes: 
+        - { Key: load_balancing.cross_zone.enabled, Value: true }
+      Subnets: 
+        - !Ref NHTLABVPCSubnet
+        - !Ref NHTLABVPCSubnetB
+      Tags: 
+        - { Key: "auto-delete", Value: "no" }
+  # Target Group for NLB
+  MyNLBTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: My-NLB-CFN-TG
+      VpcId: !Ref NHTLABVPC
+      Protocol: TCP
+      Port: 80
+      HealthCheckEnabled: true
+      HealthCheckProtocol: TCP
+      HealthCheckPort: "8080"
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      TargetType: ip
+      TargetGroupAttributes: 
+        - { Key: deregistration_delay.timeout_seconds, Value: 0}
+        - { Key: proxy_protocol_v2.enabled, Value: true}
+      Targets:
+        - { Id: !GetAtt MyEC2server.PrivateIp, Port: 80 }
+  # Listener for NLB
+  NLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      LoadBalancerArn: !Ref MyNLB
+      Protocol: TCP
+      Port: 80
+      DefaultActions: 
+        - 
+          Type: forward
+          TargetGroupArn: !Ref MyNLBTG
+
+Outputs:
+  # InstancePrivateKey:
+  #   Description: The private key of the EC2 instance
+  #   Value: !GetAtt NHTLABEC2KeyPair.KeyContent
+  ELBDNS:
+    Description: DNS of ELB
+    Value: !GetAtt MyNLB.DNSName
+  TargetGroupArn:
+    Description: ARN of Target Group
+    Value: !Ref MyNLBTG
+  InstanceID:
+    Description: InstanceID of server
+    Value: !Ref MyEC2server
+  ConsoleAccessUserName:
+    Description: Console Access Username
+    Value: !Ref ConsoleUser
+  ConsoleAccessPassword:
+    Description: Console Access Password
+    Value: !Ref ConsoleAccessPasswordParameter
+  ConsoleAccessURL:
+    Description: Console Access URL
+    Value: !Sub >-
+      https://${AWS::AccountId}.signin.aws.amazon.com/console?region=${AWS::Region}
+  VPCId:
+    Description: VPC Id of the VPC in which instance is launched
+    Value: !Ref NHTLABVPC
+

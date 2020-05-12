@@ -1,0 +1,6 @@
+Bottlenose wiki: https://w.amazon.com/bin/view/Bottlenose/ScenarioOnboarding
+Bottlenose link: https://beta.bottlenose.aws.a2z.com/d-xf1ajxcx
+Bottlenose networking sim folder: https://sim.amazon.com/issues/search?q=status%3A(Open)+in%3A(e1ea2b3b-697d-47d4-8bcd-14c6d88b3c67)&sort=lastUpdatedDate+desc&selectedDocument=2d72c530-de97-4a01-ab39-0565d00c6db3
+CFN custom resource: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html
+QUIP: https://quip-amazon.com/2GbSAaUmXiQu/Untitled#ANE9CAFa7yI
+
