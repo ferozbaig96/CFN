@@ -1,0 +1,19 @@
+Resources:
+  MyPrivateNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: MyPrivateNLB-CFN
+      Type: network
+      Scheme: internal
+      IpAddressType: ipv4
+      LoadBalancerAttributes:
+        - { Key: load_balancing.cross_zone.enabled, Value: true }
+      SubnetMappings:
+      - 
+        PrivateIPv4Address: "172.31.16.8"
+        SubnetId: subnet-6720602d
+      - 
+        PrivateIPv4Address: "172.31.80.6"
+        SubnetId: subnet-94d669ba
+      Tags:
+        - { Key: "auto-delete", Value: "no" }

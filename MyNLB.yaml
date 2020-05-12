@@ -1,0 +1,99 @@
+Resources: 
+# Network Load Balancer
+  MyNLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      Name: MyNLB-CFN
+      Type: network
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      LoadBalancerAttributes: 
+        - { Key: load_balancing.cross_zone.enabled, Value: true }
+      Subnets: 
+        - subnet-6720602d
+        - subnet-94d669ba
+      Tags: 
+        - { Key: "auto-delete", Value: "no" }
+
+# Target Group for NLB
+  MyTG:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties: 
+      Name: My-NLB-CFN-TG
+      VpcId: vpc-8c995af6
+      Protocol: TCP
+      Port: 80
+      HealthCheckEnabled: true
+      HealthCheckProtocol: TCP
+      HealthCheckPort: "80"
+      # HealthCheckPath: "/"
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      # Matcher: 
+      #   HttpCode: "200–399"
+      TargetType: ip
+      TargetGroupAttributes: 
+        - { Key: deregistration_delay.timeout_seconds, Value: 0}
+        - { Key: proxy_protocol_v2.enabled, Value: false}
+      Targets:
+        - { Id: !GetAtt MyWebServer.PrivateIp, Port: 80 }
+
+# Listener for NLB
+  NLBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties: 
+      LoadBalancerArn: !Ref MyNLB
+      Protocol: TCP
+      Port: 80
+      DefaultActions: 
+        - 
+          Type: forward
+          TargetGroupArn: !Ref MyTG
+
+# Security Group for Web Server
+  MyWSSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "CFN created SecurityGroup for MyWebServer"
+      VpcId: vpc-8c995af6
+      SecurityGroupIngress: 
+        - 
+          Description: "HTTP - TCP port 80"
+          IpProtocol: "TCP"
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        - 
+          Description: "SSH - TCP port 22"
+          IpProtocol: "TCP"
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "0.0.0.0/0"
+          
+# Web server behind NLB
+  MyWebServer:
+    Type: AWS::EC2::Instance
+    Properties: 
+      InstanceType: t2.micro
+      ImageId: ami-0aa3f36a000402f57
+      SubnetId: subnet-94d669ba
+      SecurityGroupIds: 
+        - !Ref MyWSSG
+      Tags:
+        - { Key: "auto-delete", Value: "no" }
+
+# Output http://<NLB-DNS>
+Outputs:
+  LoadBalancerDNSName:
+    Description: The DNSName of the NLB
+    Value: 
+      !Join
+        - ''
+        - 
+          - 'http://'
+          - !GetAtt MyNLB.DNSName
+  MyWebServerDNSName:
+    Description: The DNSName of the WebServer
+    Value: !GetAtt MyWebServer.PublicDnsName
