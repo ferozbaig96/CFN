@@ -4,3 +4,4 @@ Bottlenose networking sim folder: https://sim.amazon.com/issues/search?q=status%
 CFN custom resource: https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html
 QUIP: https://quip-amazon.com/2GbSAaUmXiQu/Untitled#ANE9CAFa7yI
 
+A2P Labs link: https://w.amazon.com/bin/view/AmazonWebServices/SalesSupport/DeveloperSupport/A2P/Curriculum/Networking-2018/Labs
